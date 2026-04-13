@@ -3,20 +3,279 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { margin: 0; background: transparent; font-family: Helvetica, sans-serif; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: Helvetica, sans-serif;
+      color: white;
+      overflow: hidden;
+    }
+
+    .comment-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .comment {
+      background: #1a1a1a;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+    }
+
+    .comment-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.35rem;
+    }
+
+    .comment-name {
+      font-weight: bold;
+      font-size: 0.9rem;
+      color: white;
+    }
+
+    .comment-date {
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    .comment-body {
+      font-size: 0.9rem;
+      color: #ccc;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .comments-loading,
+    .comments-empty,
+    .comments-error {
+      font-size: 0.9rem;
+      color: #666;
+      margin: 0 0 1.5rem 0;
+    }
+
+    .comments-error { color: #c00; }
+
+    .comment-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .comment-input {
+      background: #111;
+      color: white;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 0.5em 0.75em;
+      font-size: 0.9rem;
+      font-family: Helvetica, sans-serif;
+      outline: none;
+      resize: vertical;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+
+    .comment-input:focus { border-color: #0066ff; }
+    .comment-input::placeholder { color: #555; }
+
+    .comment-form-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .comment-char-count {
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    .comment-submit {
+      background: #0066ff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 0.5em 1.25em;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .comment-submit:hover { background: #0055dd; }
+    .comment-submit:disabled { background: #333; cursor: default; }
+
+    .comment-status {
+      font-size: 0.85rem;
+      min-height: 1.2em;
+      margin: 0;
+    }
+
+    .comment-status--error { color: #f55; }
+    .comment-status--success { color: #4c4; }
   </style>
 </head>
 <body>
-  <div id="cusdis_thread"></div>
+  <div id="root"></div>
+
   <script>
     const params = new URLSearchParams(window.location.search);
-    const el = document.getElementById("cusdis_thread");
-    el.dataset.host = "https://cusdis.com";
-    el.dataset.appId = params.get("appId");
-    el.dataset.pageId = params.get("pageId");
-    el.dataset.pageUrl = params.get("pageUrl");
-    el.dataset.pageTitle = params.get("pageTitle");
+    const PAGE = params.get("page") || "";
+    const API = "/api/comments";
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function formatDate(iso) {
+      return new Date(iso).toLocaleDateString("en-US", {
+        year: "numeric", month: "short", day: "numeric"
+      });
+    }
+
+    function sendHeight() {
+      window.parent.postMessage(
+        { type: "cusdis-height", height: document.body.scrollHeight },
+        "*"
+      );
+    }
+
+    const ro = new ResizeObserver(sendHeight);
+    ro.observe(document.body);
+
+    function renderComment({ name, comment, created_at }) {
+      const el = document.createElement("div");
+      el.className = "comment";
+      el.innerHTML = `
+        <div class="comment-header">
+          <span class="comment-name">${escapeHtml(name)}</span>
+          <span class="comment-date">${formatDate(created_at)}</span>
+        </div>
+        <div class="comment-body">${escapeHtml(comment)}</div>
+      `;
+      return el;
+    }
+
+    async function init() {
+      const root = document.getElementById("root");
+
+      // Comment list
+      const list = document.createElement("div");
+      list.className = "comment-list";
+      root.appendChild(list);
+
+      async function loadComments() {
+        list.innerHTML = `<p class="comments-loading">Loading comments...</p>`;
+        try {
+          const res = await fetch(`${API}?page=${encodeURIComponent(PAGE)}`);
+          const comments = await res.json();
+          list.innerHTML = "";
+          if (comments.length === 0) {
+            list.innerHTML = `<p class="comments-empty">No comments yet. Be the first!</p>`;
+          } else {
+            comments.forEach(c => list.appendChild(renderComment(c)));
+          }
+        } catch (e) {
+          list.innerHTML = `<p class="comments-error">Failed to load comments.</p>`;
+        }
+        sendHeight();
+      }
+
+      await loadComments();
+
+      // Form
+      const form = document.createElement("div");
+      form.className = "comment-form";
+      form.innerHTML = `
+        <input class="comment-input" id="comment-name" type="text" placeholder="Your name" maxlength="50">
+        <textarea class="comment-input" id="comment-body" placeholder="Leave a comment..." maxlength="500" rows="3"></textarea>
+        <div class="comment-form-footer">
+          <span class="comment-char-count">0 / 500</span>
+          <button class="comment-submit">Post</button>
+        </div>
+        <p class="comment-status"></p>
+      `;
+      root.appendChild(form);
+
+      const nameInput = form.querySelector("#comment-name");
+      const bodyInput = form.querySelector("#comment-body");
+      const submitBtn = form.querySelector(".comment-submit");
+      const charCount = form.querySelector(".comment-char-count");
+      const status   = form.querySelector(".comment-status");
+
+      bodyInput.addEventListener("input", () => {
+        charCount.textContent = `${bodyInput.value.length} / 500`;
+        sendHeight();
+      });
+
+      const savedName = localStorage.getItem("comment-name");
+      if (savedName) nameInput.value = savedName;
+
+      submitBtn.addEventListener("click", async () => {
+        const name    = nameInput.value.trim();
+        const comment = bodyInput.value.trim();
+
+        status.textContent = "";
+        status.className = "comment-status";
+
+        if (!name) {
+          status.textContent = "Please enter your name.";
+          status.classList.add("comment-status--error");
+          return;
+        }
+        if (!comment) {
+          status.textContent = "Please enter a comment.";
+          status.classList.add("comment-status--error");
+          return;
+        }
+
+        const lastPost = parseInt(localStorage.getItem("last-comment-time") || "0");
+        const now = Date.now();
+        if (now - lastPost < 30000) {
+          const secs = Math.ceil((30000 - (now - lastPost)) / 1000);
+          status.textContent = `Please wait ${secs}s before posting again.`;
+          status.classList.add("comment-status--error");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Posting...";
+
+        try {
+          const res = await fetch(API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page: PAGE, name, comment }),
+          });
+          if (!res.ok) throw new Error("Post failed");
+
+          localStorage.setItem("comment-name", name);
+          localStorage.setItem("last-comment-time", String(Date.now()));
+          bodyInput.value = "";
+          charCount.textContent = "0 / 500";
+          status.textContent = "Comment posted!";
+          status.classList.add("comment-status--success");
+          await loadComments();
+        } catch (e) {
+          status.textContent = "Failed to post comment. Please try again.";
+          status.classList.add("comment-status--error");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Post";
+          sendHeight();
+        }
+      });
+    }
+
+    init();
   </script>
-  <script src="https://cusdis.com/js/cusdis.es.js" defer></script>
 </body>
 </html>
