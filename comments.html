@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { margin: 0; background: transparent; font-family: Helvetica, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="cusdis_thread"></div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const el = document.getElementById("cusdis_thread");
+    el.dataset.host = "https://cusdis.com";
+    el.dataset.appId = params.get("appId");
+    el.dataset.pageId = params.get("pageId");
+    el.dataset.pageUrl = params.get("pageUrl");
+    el.dataset.pageTitle = params.get("pageTitle");
+  </script>
+  <script src="https://cusdis.com/js/cusdis.es.js" defer></script>
+</body>
+</html>
